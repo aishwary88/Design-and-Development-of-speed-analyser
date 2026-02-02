@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vehicle Speed & Plate Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚗 Vehicle Detection System</h1>
+            <p>Real-time speed detection & license plate recognition</p>
+        </header>
+
+        <main>
+            <div class="controls-section">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" onclick="switchTab('camera')">📹 Live Camera</button>
+                    <button class="tab-btn" onclick="switchTab('upload')">📤 Upload File</button>
+                </div>
+
+                <!-- Camera Tab -->
+                <div id="camera-tab" class="tab-content active">
+                    <div class="camera-container">
+                        <div class="video-wrapper">
+                            <img id="cameraStream" src="" alt="Camera Stream" class="camera-stream">
+                            <div id="cameraPlaceholder" class="camera-placeholder">
+                                <p>Camera will appear here</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="camera-controls">
+                        <button id="startCameraBtn" class="btn btn-primary" onclick="startCamera()">▶️ Start Camera</button>
+                        <button id="stopCameraBtn" class="btn btn-danger" onclick="stopCamera()" style="display: none;">⏹️ Stop Camera</button>
+                    </div>
+
+                    <div id="liveDetections" class="detections-display hidden">
+                        <h3>Live Detections</h3>
+                        <div id="liveDetectionsList"></div>
+                    </div>
+                </div>
+
+                <!-- Upload Tab -->
+                <div id="upload-tab" class="tab-content">
+                    <div class="upload-area" id="uploadArea">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <h2>Drag files here or click to browse</h2>
+                        <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV</p>
+                        <input type="file" id="fileInput" hidden>
+                    </div>
+
+                    <div id="uploadStatus" class="upload-status hidden">
+                        <div class="spinner"></div>
+                        <p>Processing file...</p>
+                    </div>
+
+                    <div id="uploadResults" class="results-display hidden">
+                        <h3>Detection Results</h3>
+                        <div id="resultImage" class="result-image"></div>
+                        <div id="resultVideo" class="result-video"></div>
+                        <div id="detectionsSummary" class="detections-summary"></div>
+                        <button class="btn btn-secondary" onclick="resetUpload()">Upload Another</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorMessage" class="error-message hidden"></div>
+        </main>
+
+        <footer>
+            <p>Vehicle Detection System • Real-time Speed & Plate Recognition</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
