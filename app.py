@@ -9,6 +9,7 @@ import base64
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
+import zipfile
 
 # Configure pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -17,6 +18,9 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi', 'mov', 'mkv'}
+
+# allow zip for dataset uploads
+app.config['ALLOWED_EXTENSIONS'].add('zip')
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('results', exist_ok=True)
@@ -298,6 +302,52 @@ def upload_file():
             return process_video_upload(filepath, filename)
     except Exception as e:
         return jsonify({'error': f'Processing error: {str(e)}'}), 500
+
+
+@app.route('/api/upload-dataset', methods=['POST'])
+def upload_dataset():
+    """Handle dataset upload: multiple files or a zip archive"""
+    # Support both multiple files (form field 'files') and single zip in 'files' or 'file'
+    files = request.files.getlist('files')
+    single_file = request.files.get('file')
+
+    if not files and not single_file:
+        return jsonify({'error': 'No files provided'}), 400
+
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    dataset_dir = os.path.join(app.config['UPLOAD_FOLDER'], f'dataset_{timestamp}')
+    os.makedirs(dataset_dir, exist_ok=True)
+
+    saved_files = []
+
+    try:
+        # If a single zip was uploaded
+        if single_file and single_file.filename and single_file.filename.rsplit('.', 1)[1].lower() == 'zip':
+            zip_path = os.path.join(dataset_dir, secure_filename(single_file.filename))
+            single_file.save(zip_path)
+
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                for member in zf.namelist():
+                    # avoid directory traversal
+                    member_name = os.path.basename(member)
+                    if not member_name:
+                        continue
+                    target_path = os.path.join(dataset_dir, member_name)
+                    with open(target_path, 'wb') as out_f:
+                        out_f.write(zf.read(member))
+                    saved_files.append(member_name)
+        else:
+            # Save each uploaded file
+            for f in files:
+                if f and f.filename:
+                    fname = secure_filename(f.filename)
+                    fpath = os.path.join(dataset_dir, fname)
+                    f.save(fpath)
+                    saved_files.append(fname)
+
+        return jsonify({'success': True, 'message': 'Dataset uploaded', 'files': saved_files, 'path': dataset_dir})
+    except Exception as e:
+        return jsonify({'error': f'Failed to save dataset: {str(e)}'}), 500
 
 def process_image_upload(filepath, filename):
     """Process uploaded image"""

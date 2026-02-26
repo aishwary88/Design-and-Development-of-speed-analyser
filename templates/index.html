@@ -1,23 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vehicle Speed & Plate Detection</title>
+    <title> Vehicle Detection System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
     <div class="container">
+        <!-- Header with Gradient -->
         <header>
-            <h1>🚗 Vehicle Detection System</h1>
-            <p>Real-time speed detection & license plate recognition</p>
+            <div class="header-content">
+                <h1>🚗 Vehicle Detection System</h1>
+                <p>Real-time speed detection & license plate recognition powered by AI</p>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-ai">AI Powered</span>
+                <span class="badge badge-realtime">Real-time</span>
+            </div>
         </header>
 
         <main>
+            <!-- Stats Dashboard -->
+            <section class="stats-dashboard">
+                <div class="stat-card">
+                    <div class="stat-icon">🚙</div>
+                    <div class="stat-content">
+                        <h3>Vehicles</h3>
+                        <p class="stat-value" id="statsVehicles">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-content">
+                        <h3>Avg Speed</h3>
+                        <p class="stat-value" id="statsSpeed">0 km/h</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📍</div>
+                    <div class="stat-content">
+                        <h3>Plates</h3>
+                        <p class="stat-value" id="statsPlates">0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tab Navigation -->
             <div class="controls-section">
                 <div class="tab-buttons">
-                    <button class="tab-btn active" onclick="switchTab('camera')">📹 Live Camera</button>
-                    <button class="tab-btn" onclick="switchTab('upload')">📤 Upload File</button>
+                    <button class="tab-btn active" onclick="switchTab('camera')">
+                        <span class="tab-icon">📹</span>
+                        <span>Live Camera</span>
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('upload')">
+                        <span class="tab-icon">📤</span>
+                        <span>Upload File</span>
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('dataset')">
+                        <span class="tab-icon">🗂️</span>
+                        <span>Dataset Upload</span>
+                    </button>
                 </div>
 
                 <!-- Camera Tab -->
@@ -26,46 +71,87 @@
                         <div class="video-wrapper">
                             <img id="cameraStream" src="" alt="Camera Stream" class="camera-stream">
                             <div id="cameraPlaceholder" class="camera-placeholder">
+                                <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="1">
+                                    <path d="M23 13a6 6 0 0 0-10.712-3.714m-8.004 8.004A6 6 0 0 0 23 13"></path>
+                                    <circle cx="12" cy="12" r="8"></circle>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
                                 <p>Camera will appear here</p>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="camera-controls">
-                        <button id="startCameraBtn" class="btn btn-primary" onclick="startCamera()">▶️ Start Camera</button>
-                        <button id="stopCameraBtn" class="btn btn-danger" onclick="stopCamera()" style="display: none;">⏹️ Stop Camera</button>
+                        <button id="startCameraBtn" class="btn btn-primary btn-lg" onclick="startCamera()">
+                            <span>▶️</span> Start Camera
+                        </button>
+                        <button id="stopCameraBtn" class="btn btn-danger btn-lg" onclick="stopCamera()"
+                            style="display: none;">
+                            <span>⏹️</span> Stop Camera
+                        </button>
                     </div>
 
                     <div id="liveDetections" class="detections-display hidden">
-                        <h3>Live Detections</h3>
+                        <h3>🎯 Live Detections</h3>
                         <div id="liveDetectionsList"></div>
                     </div>
                 </div>
 
                 <!-- Upload Tab -->
                 <div id="upload-tab" class="tab-content">
-                    <div class="upload-area" id="uploadArea">
-                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="17 8 12 3 7 8"></polyline>
-                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                        </svg>
-                        <h2>Drag files here or click to browse</h2>
-                        <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV</p>
-                        <input type="file" id="fileInput" hidden>
-                    </div>
+                    <div class="upload-container">
+                        <div class="upload-area" id="uploadArea">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <h2>Drag files here or click to browse</h2>
+                            <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV</p>
+                            <input type="file" id="fileInput" hidden>
+                        </div>
 
-                    <div id="uploadStatus" class="upload-status hidden">
-                        <div class="spinner"></div>
-                        <p>Processing file...</p>
-                    </div>
+                        <div id="uploadStatus" class="upload-status hidden">
+                            <div class="spinner"></div>
+                            <p>Processing file...</p>
+                        </div>
 
-                    <div id="uploadResults" class="results-display hidden">
-                        <h3>Detection Results</h3>
-                        <div id="resultImage" class="result-image"></div>
-                        <div id="resultVideo" class="result-video"></div>
-                        <div id="detectionsSummary" class="detections-summary"></div>
-                        <button class="btn btn-secondary" onclick="resetUpload()">Upload Another</button>
+                        <div id="uploadResults" class="results-display hidden">
+                            <h3>✅ Detection Results</h3>
+                            <div id="resultImage" class="result-image"></div>
+                            <div id="resultVideo" class="result-video"></div>
+                            <div id="detectionsSummary" class="detections-summary"></div>
+                            <button class="btn btn-secondary" onclick="resetUpload()">⬆️ Upload Another</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dataset Tab -->
+                <div id="dataset-tab" class="tab-content">
+                    <div class="upload-container">
+                        <div class="upload-area" id="datasetArea">
+                            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                            <h2>Upload dataset (multiple files) or a ZIP</h2>
+                            <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV, ZIP</p>
+                            <input type="file" id="datasetFileInput" hidden multiple>
+                        </div>
+
+                        <div id="datasetStatus" class="upload-status hidden">
+                            <div class="spinner"></div>
+                            <p>Uploading dataset...</p>
+                        </div>
+
+                        <div id="datasetResults" class="results-display hidden">
+                            <h3>✅ Dataset Upload Results</h3>
+                            <div id="datasetFileList"></div>
+                            <button class="btn btn-secondary" onclick="resetDatasetUpload()">⬆️ Upload Another
+                                Dataset</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -73,11 +159,16 @@
             <div id="errorMessage" class="error-message hidden"></div>
         </main>
 
+        <!-- Footer -->
         <footer>
-            <p>Vehicle Detection System • Real-time Speed & Plate Recognition</p>
+            <div class="footer-content">
+                <p>🚗 Vehicle Detection System</p>
+                <p>Real-time Speed & Plate Recognition | Powered by YOLOv8</p>
+            </div>
         </footer>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
+
 </html>
