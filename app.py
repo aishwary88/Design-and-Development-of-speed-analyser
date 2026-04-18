@@ -1,50 +1,76 @@
 from flask import Flask, render_template, request, jsonify, Response, send_file
 import cv2
-import pytesseract
 import numpy as np
 from ultralytics import YOLO
 import os
-import threading
 import base64
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
+import database
+import threading
+import time
 
-# Configure pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Try to import pytesseract for OCR (optional)
+try:
+    import pytesseract
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    TESSERACT_AVAILABLE = True
+except:
+    TESSERACT_AVAILABLE = False
+    print("⚠️  Warning: Tesseract-OCR not found. OCR features disabled.")
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi', 'mov', 'mkv'}
 
+# Add CORS headers
+@app.after_request
+def add_headers(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('results', exist_ok=True)
 
+# Initialize database
+print("💾 Initializing robust database...")
+database.init_db()
+
 # Load YOLO model
+print("📦 Loading YOLO model...")
 model = YOLO('yolov8n.pt')
+print("✅ YOLO model loaded successfully!")
 
-# Global variables for camera stream
-camera = None
-camera_thread = None
-frame_queue = None
+# Global variables
 is_camera_running = False
-
-# Speed calculation parameters
-PIXELS_PER_METER = 50
-FPS = 30
-
-# Vehicle tracker
 vehicle_tracker = {}
 frame_count = 0
+cap = None
+tracker_lock = threading.Lock()
+latest_raw_frame = None
+ai_thread_running = False
+cumulative_vehicle_count = 0
+camera_ready = False  # True once camera hardware is confirmed open
 
+# Configuration
+PIXELS_PER_METER = 50
+FPS = 30
+SPEED_LIMIT = 60.0  # Speed limit threshold for overspeeding database
 CAR_CLASSES = [2, 5, 7]  # car, bus, truck
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def detect_license_plate(img):
-    """Enhanced license plate detection and OCR"""
+    """Detect and read license plates using OCR"""
+    if not TESSERACT_AVAILABLE:
+        return None
+    
     try:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -60,24 +86,27 @@ def detect_license_plate(img):
             
             if 2000 < area < 100000 and 2 < aspect_ratio < 6:
                 plate_roi = img[y:y+h, x:x+w]
-                plate_text = pytesseract.image_to_string(
-                    plate_roi,
-                    config='--psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-                ).strip()
-                
-                if len(plate_text) > 2:
-                    plates.append({
-                        'text': plate_text,
-                        'confidence': len(plate_text),
-                        'bbox': (x, y, w, h)
-                    })
+                try:
+                    plate_text = pytesseract.image_to_string(
+                        plate_roi,
+                        config='--psm 8 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                    ).strip()
+                    
+                    if len(plate_text) > 2:
+                        plates.append({
+                            'text': plate_text,
+                            'confidence': len(plate_text),
+                            'bbox': (x, y, w, h)
+                        })
+                except:
+                    pass
         
         return plates[0] if plates else None
-    except:
+    except Exception as e:
         return None
 
 def calculate_speed(vehicle_id, current_pos, prev_pos, time_diff):
-    """Calculate speed from position change"""
+    """Calculate speed from position changes"""
     if time_diff <= 0:
         return 0
     
@@ -88,12 +117,11 @@ def calculate_speed(vehicle_id, current_pos, prev_pos, time_diff):
     
     return max(0, speed_kmh)
 
-def track_vehicles(detections, frame_height, frame_width):
-    """Simple vehicle tracking based on position"""
+def track_vehicles(detections, frame_height, frame_width, time_diff):
+    """Track vehicles across frames"""
     global vehicle_tracker, frame_count
     
     frame_count += 1
-    time_diff = 1 / FPS
     
     current_detections = {}
     
@@ -102,7 +130,8 @@ def track_vehicles(detections, frame_height, frame_width):
         cls_id = detection['class']
         conf = detection['confidence']
         
-        center = ((x1 + x2) / 2, (y1 + y2) / 2)
+        # Track bottom-center instead of center for better stability (where tires touch road)
+        center = ((x1 + x2) / 2, y2)
         current_detections[center] = {
             'box': detection['box'],
             'class': cls_id,
@@ -117,58 +146,90 @@ def track_vehicles(detections, frame_height, frame_width):
         
         for current_center in current_detections:
             distance = np.linalg.norm(np.array(current_center) - np.array(prev_center))
-            if distance < min_distance and distance < 100:
+            # Increase tracking distance slightly if frame rate drops
+            max_dist = 100 * max(1.0, time_diff * 30)
+            if distance < min_distance and distance < max_dist:
                 min_distance = distance
                 closest_center = current_center
         
         if closest_center:
-            speed = calculate_speed(vehicle_id, closest_center, prev_center, time_diff)
-            vehicle_tracker[vehicle_id] = {
-                'center': closest_center,
-                'speed': speed,
-                'box': current_detections[closest_center]['box'],
-                'confidence': current_detections[closest_center]['confidence'],
-                'frames': vehicle_tracker[vehicle_id]['frames'] + 1,
-                'plate': vehicle_tracker[vehicle_id].get('plate', None)
-            }
+            raw_speed = calculate_speed(vehicle_id, closest_center, prev_center, time_diff)
+            
+            # Use moving average to smooth speed updates
+            prev_speeds = vehicle_tracker[vehicle_id].get('speed_history', [])
+            prev_speeds.append(raw_speed)
+            if len(prev_speeds) > 5:
+                prev_speeds.pop(0)
+            smoothed_speed = sum(prev_speeds) / len(prev_speeds)
+            
+            current_plate = vehicle_tracker[vehicle_id].get('plate', None)
+            is_logged = vehicle_tracker[vehicle_id].get('logged_to_db', False)
+            
+            # If vehicle breaks the speed limit and hasn't been logged yet, log it!
+            if smoothed_speed > SPEED_LIMIT and not is_logged:
+                database.log_violation(vehicle_id, smoothed_speed, current_plate)
+                is_logged = True
+            
+            with tracker_lock:
+                vehicle_tracker[vehicle_id] = {
+                    'center': closest_center,
+                    'speed': smoothed_speed,
+                    'speed_history': prev_speeds,
+                    'box': current_detections[closest_center]['box'],
+                    'confidence': current_detections[closest_center]['confidence'],
+                    'frames': vehicle_tracker[vehicle_id]['frames'] + 1,
+                    'plate': current_plate,
+                    'logged_to_db': is_logged
+                }
             del current_detections[closest_center]
         else:
-            if vehicle_tracker[vehicle_id]['frames'] > 5:
-                del vehicle_tracker[vehicle_id]
-            else:
-                vehicle_tracker[vehicle_id]['frames'] -= 1
+            with tracker_lock:
+                if vehicle_tracker[vehicle_id]['frames'] > 5:
+                    # Log to database right before the vehicle disappears
+                    database.log_vehicle(vehicle_id, vehicle_tracker[vehicle_id]['speed'], vehicle_tracker[vehicle_id].get('plate'))
+                    del vehicle_tracker[vehicle_id]
+                else:
+                    vehicle_tracker[vehicle_id]['frames'] -= 1
     
-    new_vehicle_id = max(vehicle_tracker.keys()) + 1 if vehicle_tracker else 1
-    for center, detection in current_detections.items():
-        vehicle_tracker[new_vehicle_id] = {
-            'center': center,
-            'speed': 0,
-            'box': detection['box'],
-            'confidence': detection['confidence'],
-            'frames': 1,
-            'plate': None
-        }
-        new_vehicle_id += 1
+    global cumulative_vehicle_count
+    with tracker_lock:
+        for center, detection in current_detections.items():
+            cumulative_vehicle_count += 1
+            new_vehicle_id = cumulative_vehicle_count
+            vehicle_tracker[new_vehicle_id] = {
+                'center': center,
+                'speed': 0,
+                'speed_history': [0],
+                'box': detection['box'],
+                'confidence': detection['confidence'],
+                'frames': 1,
+                'plate': None,
+                'logged_to_db': False
+            }
 
-def process_frame(frame):
-    """Process single frame for vehicle and plate detection"""
-    results = model(frame)
-    detections = []
+def process_frame(frame, time_diff=1/30.0, skip_detection=False):
+    """Process frame for vehicle detection"""
+    global vehicle_tracker
     
-    for result in results:
-        if result.boxes is not None:
-            for box in result.boxes:
-                cls_id = int(box.cls[0])
-                if cls_id in CAR_CLASSES:
-                    x1, y1, x2, y2 = box.xyxy[0]
-                    confidence = float(box.conf[0])
-                    detections.append({
-                        'box': (float(x1), float(y1), float(x2), float(y2)),
-                        'class': cls_id,
-                        'confidence': confidence
-                    })
-    
-    track_vehicles(detections, frame.shape[0], frame.shape[1])
+    if not skip_detection:
+        # Run YOLO with smaller image size for high FPS and disable verbose
+        results = model(frame, imgsz=320, verbose=False)
+        detections = []
+        
+        for result in results:
+            if result.boxes is not None:
+                for box in result.boxes:
+                    cls_id = int(box.cls[0])
+                    if cls_id in CAR_CLASSES:
+                        x1, y1, x2, y2 = box.xyxy[0]
+                        confidence = float(box.conf[0])
+                        detections.append({
+                            'box': (float(x1), float(y1), float(x2), float(y2)),
+                            'class': cls_id,
+                            'confidence': confidence
+                        })
+        
+        track_vehicles(detections, frame.shape[0], frame.shape[1], time_diff)
     
     output_frame = frame.copy()
     frame_data = {
@@ -176,27 +237,41 @@ def process_frame(frame):
         'timestamp': datetime.now().isoformat()
     }
     
-    for vehicle_id, vehicle_data in vehicle_tracker.items():
+    with tracker_lock:
+        working_tracker = dict(vehicle_tracker)
+    
+    for vehicle_id, vehicle_data in working_tracker.items():
         x1, y1, x2, y2 = vehicle_data['box']
         speed = vehicle_data['speed']
         confidence = vehicle_data['confidence']
         
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         
-        # Detect license plate
-        vehicle_roi = frame[y1:y2, x1:x2]
-        plate_data = None
-        if vehicle_roi.size > 0:
-            plate_data = detect_license_plate(vehicle_roi)
-            if plate_data:
-                vehicle_tracker[vehicle_id]['plate'] = plate_data['text']
+        # Detect license plate ONLY if we haven't already found it and not skipping
+        current_plate = vehicle_data.get('plate')
+        if not current_plate and not skip_detection:
+            vehicle_roi = frame[y1:y2, x1:x2]
+            if vehicle_roi.size > 0:
+                # Only run heavy Tesseract OCR once every 5 frames per vehicle
+                if vehicle_data['frames'] % 5 == 0:
+                    plate_data = detect_license_plate(vehicle_roi)
+                    if plate_data:
+                        with tracker_lock:
+                            if vehicle_id in vehicle_tracker:
+                                vehicle_tracker[vehicle_id]['plate'] = plate_data['text']
+                        current_plate = plate_data['text']
         
-        plate_text = vehicle_tracker[vehicle_id]['plate'] or 'N/A'
+        plate_text = current_plate or 'N/A'
         
         # Color based on speed
-        color = (0, 255, 0) if speed < 60 else (0, 165, 255) if speed < 90 else (0, 0, 255)
-        cv2.rectangle(output_frame, (x1, y1), (x2, y2), color, 2)
+        if speed < 60:
+            color = (0, 255, 0)  # Green
+        elif speed < 90:
+            color = (0, 165, 255)  # Orange
+        else:
+            color = (0, 0, 255)  # Red
         
+        cv2.rectangle(output_frame, (x1, y1), (x2, y2), color, 2)
         cv2.putText(output_frame, f'ID: {vehicle_id} | {speed:.1f} km/h',
                     (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
         cv2.putText(output_frame, f'Plate: {plate_text}',
@@ -209,67 +284,222 @@ def process_frame(frame):
             'confidence': round(confidence, 3)
         })
     
-    cv2.putText(output_frame, f'Frame: {frame_count} | Vehicles: {len(vehicle_tracker)}',
+    cv2.putText(output_frame, f'Frame: {frame_count} | Total Cars Screened: {cumulative_vehicle_count}',
                 (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
     
     return output_frame, frame_data
 
-def generate_camera_frames():
-    """Generate frames from camera"""
-    global is_camera_running, vehicle_tracker, frame_count
+def ai_worker_loop():
+    """Background thread to process AI without blocking camera stream"""
+    global latest_raw_frame, ai_thread_running
+    last_frame_time = time.time()
     
-    cap = cv2.VideoCapture(0)
+    while ai_thread_running:
+        if latest_raw_frame is None:
+            time.sleep(0.01)
+            continue
+            
+        frame_to_process = latest_raw_frame.copy()
+        
+        current_time = time.time()
+        time_diff = current_time - last_frame_time
+        if time_diff <= 0:
+            time_diff = 1/30.0
+        last_frame_time = current_time
+        
+        # Run AI detection and tracking update (discard visual output here)
+        process_frame(frame_to_process, time_diff, skip_detection=False)
+        
+        # Prevent maxing out CPU 100% loop
+        time.sleep(0.01)
+
+def init_camera_hardware():
+    """Open camera hardware in background so it's ready before stream is requested."""
+    global cap, camera_ready, is_camera_running
+    camera_ready = False
     
-    if not cap.isOpened():
-        print("Error: Cannot open camera")
+    print("🎥 Attempting to open camera...")
+    new_cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not new_cap.isOpened():
+        print("❌ ERROR: Cannot open camera with DSHOW, trying default backend...")
+        new_cap = cv2.VideoCapture(0)
+    
+    if not new_cap.isOpened():
+        print("❌ ERROR: Cannot open camera!")
         is_camera_running = False
         return
     
-    is_camera_running = True
-    vehicle_tracker = {}
-    frame_count = 0
+    new_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    new_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    new_cap.set(cv2.CAP_PROP_FPS, 30)
+    new_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap = new_cap
+    camera_ready = True
+    print("✅ Camera hardware initialized and ready!")
+
+def generate_camera_frames():
+    """Generate frames from webcam"""
+    global is_camera_running, vehicle_tracker, frame_count, cap, tracker_lock
+    global latest_raw_frame, ai_thread_running, camera_ready
     
-    while is_camera_running:
-        ret, frame = cap.read()
-        if not ret:
+    # Wait up to 5 seconds for camera to be ready
+    for _ in range(50):
+        if camera_ready:
             break
-        
-        output_frame, frame_data = process_frame(frame)
-        
-        # Encode frame to JPEG
-        _, buffer = cv2.imencode('.jpg', output_frame)
-        frame_bytes = buffer.tobytes()
-        
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n'
-               b'Content-Length: ' + str(len(frame_bytes)).encode() + b'\r\n\r\n' +
-               frame_bytes + b'\r\n')
+        time.sleep(0.1)
     
-    cap.release()
+    if not camera_ready or cap is None or not cap.isOpened():
+        print("❌ Camera not ready, cannot stream.")
+        is_camera_running = False
+        return
+    
+    try:
+        vehicle_tracker = {}
+        frame_count = 0
+        latest_raw_frame = None
+        global cumulative_vehicle_count
+        cumulative_vehicle_count = 0
+        
+        # Start AI worker thread
+        ai_thread_running = True
+        ai_thread = threading.Thread(target=ai_worker_loop)
+        ai_thread.daemon = True
+        ai_thread.start()
+        
+        while is_camera_running:
+            ret, frame = cap.read()
+            if not ret:
+                print("⚠️ Failed to read frame from camera")
+                break
+            
+            # Immediately provide frame to background AI thread
+            latest_raw_frame = frame.copy()
+            
+            try:
+                # Main thread ONLY draws rectangles. This takes < 1ms, resulting in 30 FPS playback!
+                output_frame, frame_data = process_frame(frame, time_diff=1/30.0, skip_detection=True)
+                
+                # Encode frame to JPEG with quality
+                _, buffer = cv2.imencode('.jpg', output_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                frame_bytes = buffer.tobytes()
+                
+                # Send MJPEG frame fast
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n'
+                       b'Content-Length: ' + str(len(frame_bytes)).encode() + b'\r\n'
+                       b'X-Timestamp: ' + str(datetime.now().isoformat()).encode() + b'\r\n\r\n' +
+                       frame_bytes + b'\r\n')
+            except Exception as e:
+                print(f"⚠️ Frame processing error: {type(e).__name__}: {e}")
+                continue
+        
+        print("ℹ️ Camera stream ended")
+        
+    except Exception as e:
+        print(f"❌ Critical camera error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        is_camera_running = False
+    finally:
+        is_camera_running = False
+        ai_thread_running = False
+        camera_ready = False
+        if cap:
+            cap.release()
+            print("✅ Camera released")
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/stream')
+def stream_page():
+    """Serve the video stream page"""
+    return render_template('stream.html')
+
+@app.route('/api/status')
+def get_status():
+    """Get system status"""
+    return jsonify({
+        'camera_running': is_camera_running,
+        'vehicles_tracked': len(vehicle_tracker),
+        'frame_count': frame_count
+    })
+
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():
-    """Start camera stream"""
-    global is_camera_running
+    """Start camera - opens hardware in background thread so stream is ready quickly"""
+    global is_camera_running, camera_ready
     is_camera_running = True
-    return jsonify({'status': 'Camera started'})
+    camera_ready = False
+    # Launch camera hardware init in background so /api/camera/stream finds it ready
+    init_thread = threading.Thread(target=init_camera_hardware, daemon=True)
+    init_thread.start()
+    print("🎥 Camera init thread launched")
+    return jsonify({'status': 'success', 'message': 'Camera starting...'})
 
 @app.route('/api/camera/stop', methods=['POST'])
 def stop_camera():
     """Stop camera stream"""
     global is_camera_running
     is_camera_running = False
-    return jsonify({'status': 'Camera stopped'})
+    print("🛑 Camera stream stopped")
+    return jsonify({'status': 'success', 'message': 'Camera stopped'})
+
+@app.route('/api/camera/ready')
+def camera_ready_check():
+    """Frontend polls this to know when camera hardware is open and streaming is safe"""
+    return jsonify({'ready': camera_ready, 'camera_running': is_camera_running})
 
 @app.route('/api/camera/stream')
 def camera_stream():
     """Stream camera feed"""
     return Response(generate_camera_frames(),
                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/api/camera/frame')
+def camera_frame():
+    """Get single frame"""
+    global is_camera_running
+    if not is_camera_running:
+        return jsonify({'error': 'Camera not running'}), 400
+    
+    try:
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            return jsonify({'error': 'Cannot open camera'}), 400
+        
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret:
+            return jsonify({'error': 'Failed to capture frame'}), 400
+        
+        output_frame, frame_data = process_frame(frame)
+        _, buffer = cv2.imencode('.jpg', output_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        frame_base64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
+        
+        return jsonify({
+            'success': True,
+            'image': f'data:image/jpeg;base64,{frame_base64}',
+            'detections': frame_data['vehicles'],
+            'frame_count': frame_count,
+            'vehicles_count': len(vehicle_tracker)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/violations')
+def get_violations():
+    """Fetch all overspeeding violations from database"""
+    try:
+        violations = database.get_all_violations()
+        return jsonify({'success': True, 'violations': violations, 'count': len(violations)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -314,7 +544,6 @@ def process_image_upload(filepath, filename):
     output_path = os.path.join('results', f'result_{datetime.now().strftime("%Y%m%d_%H%M%S")}.jpg')
     cv2.imwrite(output_path, output_frame)
     
-    # Convert to base64 for display
     _, buffer = cv2.imencode('.jpg', output_frame)
     img_base64 = base64.b64encode(buffer).decode()
     
@@ -338,6 +567,10 @@ def process_video_upload(filepath, filename):
         return jsonify({'error': 'Cannot open video'}), 400
     
     fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30.0
+    time_diff = 1.0 / fps
+    
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
@@ -354,7 +587,7 @@ def process_video_upload(filepath, filename):
         if not ret:
             break
         
-        output_frame, frame_data = process_frame(frame)
+        output_frame, frame_data = process_frame(frame, time_diff)
         out.write(output_frame)
         
         frame_data['frame_number'] = frame_num
@@ -364,10 +597,37 @@ def process_video_upload(filepath, filename):
     cap.release()
     out.release()
     
+    # Generate Excel/CSV Database for the video
+    unique_vehicles = {}
+    for frame_data in all_detections:
+        for v in frame_data.get('vehicles', []):
+            vid = v['id']
+            if vid not in unique_vehicles:
+                unique_vehicles[vid] = {'plate': 'N/A', 'speeds': []}
+            if v['plate'] and v['plate'] != 'N/A':
+                unique_vehicles[vid]['plate'] = v['plate']
+            unique_vehicles[vid]['speeds'].append(v['speed'])
+            
+    import csv
+    csv_filename = f'database_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+    csv_path = os.path.join('results', csv_filename)
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Vehicle ID', 'Average Speed (km/h)', 'Max Speed (km/h)', 'Number Plate'])
+        for vid, data in unique_vehicles.items():
+            if data['speeds']:
+                avg_speed = round(sum(data['speeds']) / len(data['speeds']), 2)
+                max_speed = round(max(data['speeds']), 2)
+            else:
+                avg_speed = max_speed = 0
+            writer.writerow([vid, avg_speed, max_speed, data['plate']])
+    
     return jsonify({
         'success': True,
         'message': 'Video processed successfully',
         'download_url': f'/api/download/{output_filename}',
+        'database_url': f'/api/download/{csv_filename}',
         'detections': all_detections,
         'total_frames': frame_num
     })
@@ -378,4 +638,11 @@ def download_file(filename):
     return send_file(os.path.join('results', filename), as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("\n" + "="*50)
+    print("🚀 SentrySpeed Vehicle Analytics Starting...")
+    print("="*50)
+    print("📍 URL: http://localhost:5000")
+    print("⏹️  Press CTRL+C to stop")
+    print("="*50 + "\n")
+    
+    app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
