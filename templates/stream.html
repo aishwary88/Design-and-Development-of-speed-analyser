@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        .stream-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #stream-image {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            object-fit: contain;
+        }
+        .loading {
+            position: absolute;
+            text-align: center;
+            color: #fff;
+            z-index: 100;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 4px solid #4ade80;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #4ade80;
+            padding: 12px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="stream-container">
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Initializing camera stream...</p>
+        </div>
+        <img id="stream-image" src="" alt="Video Stream" style="display: none;">
+        <div id="status" class="status">● Connecting...</div>
+    </div>
+
+    <script>
+        const streamImage = document.getElementById('stream-image');
+        const loading = document.getElementById('loading');
+        const statusDiv = document.getElementById('status');
+        let isStreaming = false;
+        let frameCount = 0;
+        let fpsCounter = 0;
+        let lastFpsTime = Date.now();
+        let streamStarted = false;
+
+        async function fetchFrame() {
+            try {
+                const response = await fetch('/api/camera/frame');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (!streamStarted) {
+                        streamStarted = true;
+                        loading.style.display = 'none';
+                        streamImage.style.display = 'block';
+                        isStreaming = true;
+                    }
+                    
+                    streamImage.src = data.image;
+                    frameCount++;
+                    fpsCounter++;
+                    
+                    // Update FPS display
+                    const now = Date.now();
+                    if (now - lastFpsTime > 1000) {
+                        lastFpsTime = now;
+                        statusDiv.textContent = `● Live (${fpsCounter} fps)`;
+                        fpsCounter = 0;
+                    }
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Frame fetch error:', error);
+                
+                if (streamStarted) {
+                    statusDiv.style.color = '#ff9800';
+                    statusDiv.textContent = '● Buffering...';
+                } else {
+                    showError(`Failed: ${error.message}`);
+                }
+            }
+            
+            // Continue polling
+            if (isStreaming) {
+                requestAnimationFrame(fetchFrame);
+            }
+        }
+
+        function showError(message) {
+            loading.innerHTML = `
+                <div>
+                    <div class="spinner" style="border-top-color: #ef4444;"></div>
+                    <p style="color: #ef4444;">${message}</p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">Retrying...</p>
+                </div>
+            `;
+            loading.style.display = 'block';
+            statusDiv.textContent = '● Error';
+            statusDiv.style.color = '#ef4444';
+            
+            // Retry after 2 seconds
+            setTimeout(startStream, 2000);
+        }
+
+        function startStream() {
+            if (!isStreaming) {
+                isStreaming = true;
+                statusDiv.textContent = '● Connecting...';
+                statusDiv.style.color = '#fbbf24';
+                fetchFrame();
+            }
+        }
+
+        // Start the stream
+        startStream();
+
+        // Handle page visibility
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                isStreaming = false;
+            } else {
+                startStream();
+            }
+        });
+    </script>
+</body>
+</html>
