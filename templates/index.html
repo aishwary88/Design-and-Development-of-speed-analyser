@@ -4,51 +4,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Vehicle Detection System</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Traffic Speed Analyser</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ cache_buster }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
 </head>
 
 <body>
     <div class="container">
-        <!-- Header with Gradient -->
+        <!-- Futuristic Header -->
         <header>
             <div class="header-content">
-                <h1>🚗 Vehicle Detection System</h1>
-                <p>Real-time speed detection & license plate recognition powered by AI</p>
+                <h1>🚗 Traffic Speed Analyser</h1>
+                <p>Advanced Analytics • Real-time Speed Detection & License Plate Recognition</p>
             </div>
             <div class="header-badges">
                 <span class="badge badge-ai">AI Powered</span>
-                <span class="badge badge-realtime">Real-time</span>
+                <span class="badge badge-realtime">Live Monitoring</span>
             </div>
         </header>
 
         <main>
-            <!-- Stats Dashboard -->
+            <!-- Advanced Stats Dashboard -->
             <section class="stats-dashboard">
                 <div class="stat-card">
                     <div class="stat-icon">🚙</div>
                     <div class="stat-content">
-                        <h3>Vehicles</h3>
+                        <h3>Total Vehicles</h3>
                         <p class="stat-value" id="statsVehicles">0</p>
                     </div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">⚡</div>
                     <div class="stat-content">
-                        <h3>Avg Speed</h3>
+                        <h3>Average Speed</h3>
                         <p class="stat-value" id="statsSpeed">0 km/h</p>
                     </div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-icon">📍</div>
                     <div class="stat-content">
-                        <h3>Plates</h3>
+                        <h3>License Plates</h3>
                         <p class="stat-value" id="statsPlates">0</p>
                     </div>
                 </div>
             </section>
 
-            <!-- Tab Navigation -->
+            <!-- Advanced Control Panel -->
             <div class="controls-section">
                 <div class="tab-buttons">
                     <button class="tab-btn active" onclick="switchTab('camera')">
@@ -65,7 +70,7 @@
                     </button>
                 </div>
 
-                <!-- Camera Tab -->
+                <!-- Live Camera Interface -->
                 <div id="camera-tab" class="tab-content active">
                     <div class="camera-container">
                         <div class="video-wrapper">
@@ -77,28 +82,29 @@
                                     <circle cx="12" cy="12" r="8"></circle>
                                     <circle cx="12" cy="12" r="3"></circle>
                                 </svg>
-                                <p>Camera will appear here</p>
+                                <p>Neural Network Camera Feed</p>
+                                <p style="font-size: 0.9em; opacity: 0.7;">Real-time AI processing ready</p>
                             </div>
                         </div>
                     </div>
 
                     <div class="camera-controls">
                         <button id="startCameraBtn" class="btn btn-primary btn-lg" onclick="startCamera()">
-                            <span>▶️</span> Start Camera
+                            <span>▶️</span> Initialize Camera
                         </button>
                         <button id="stopCameraBtn" class="btn btn-danger btn-lg" onclick="stopCamera()"
                             style="display: none;">
-                            <span>⏹️</span> Stop Camera
+                            <span>⏹️</span> Terminate Feed
                         </button>
                     </div>
 
                     <div id="liveDetections" class="detections-display hidden">
-                        <h3>🎯 Live Detections</h3>
+                        <h3>🎯 Live Detection Analytics</h3>
                         <div id="liveDetectionsList"></div>
                     </div>
                 </div>
 
-                <!-- Upload Tab -->
+                <!-- Advanced Upload Interface -->
                 <div id="upload-tab" class="tab-content">
                     <div class="upload-container">
                         <div class="upload-area" id="uploadArea">
@@ -107,27 +113,29 @@
                                 <polyline points="17 8 12 3 7 8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
-                            <h2>Drag files here or click to browse</h2>
-                            <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV</p>
+                            <h2>Neural Network File Processing</h2>
+                            <p>Drag & drop files or click to browse • AI-powered analysis</p>
+                            <p style="font-size: 0.9em; opacity: 0.8; margin-top: 8px;">Supported: PNG, JPG, GIF, MP4,
+                                AVI, MOV, MKV</p>
                             <input type="file" id="fileInput" hidden>
                         </div>
 
                         <div id="uploadStatus" class="upload-status hidden">
                             <div class="spinner"></div>
-                            <p>Processing file...</p>
+                            <p>AI Processing in progress...</p>
                         </div>
 
                         <div id="uploadResults" class="results-display hidden">
-                            <h3>✅ Detection Results</h3>
+                            <h3>✅ Analysis Complete</h3>
                             <div id="resultImage" class="result-image"></div>
                             <div id="resultVideo" class="result-video"></div>
                             <div id="detectionsSummary" class="detections-summary"></div>
-                            <button class="btn btn-secondary" onclick="resetUpload()">⬆️ Upload Another</button>
+                            <button class="btn btn-secondary" onclick="resetUpload()">⬆️ Process Another File</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Dataset Tab -->
+                <!-- Dataset Processing Interface -->
                 <div id="dataset-tab" class="tab-content">
                     <div class="upload-container">
                         <div class="upload-area" id="datasetArea">
@@ -136,20 +144,22 @@
                                 <polyline points="17 8 12 3 7 8"></polyline>
                                 <line x1="12" y1="3" x2="12" y2="15"></line>
                             </svg>
-                            <h2>Upload dataset (multiple files) or a ZIP</h2>
-                            <p>Supported: PNG, JPG, GIF, MP4, AVI, MOV, MKV, ZIP</p>
+                            <h2>Batch Dataset Processing</h2>
+                            <p>Upload multiple files or ZIP archive for bulk analysis</p>
+                            <p style="font-size: 0.9em; opacity: 0.8; margin-top: 8px;">Supported: PNG, JPG, GIF, MP4,
+                                AVI, MOV, MKV, ZIP</p>
                             <input type="file" id="datasetFileInput" hidden multiple>
                         </div>
 
                         <div id="datasetStatus" class="upload-status hidden">
                             <div class="spinner"></div>
-                            <p>Uploading dataset...</p>
+                            <p>Processing dataset batch...</p>
                         </div>
 
                         <div id="datasetResults" class="results-display hidden">
-                            <h3>✅ Dataset Upload Results</h3>
+                            <h3>✅ Dataset Processing Complete</h3>
                             <div id="datasetFileList"></div>
-                            <button class="btn btn-secondary" onclick="resetDatasetUpload()">⬆️ Upload Another
+                            <button class="btn btn-secondary" onclick="resetDatasetUpload()">⬆️ Process Another
                                 Dataset</button>
                         </div>
                     </div>
@@ -159,16 +169,17 @@
             <div id="errorMessage" class="error-message hidden"></div>
         </main>
 
-        <!-- Footer -->
+        <!-- Advanced Footer -->
         <footer>
             <div class="footer-content">
-                <p>🚗 Vehicle Detection System</p>
-                <p>Real-time Speed & Plate Recognition | Powered by YOLOv8</p>
+                <p>🚗 Traffic Speed Analyser</p>
+                <p>Advanced AI-Powered Traffic Analytics • Real-time Speed & License Plate Recognition • YOLOv8 Neural
+                    Network</p>
             </div>
         </footer>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v={{ cache_buster }}"></script>
 </body>
 
 </html>

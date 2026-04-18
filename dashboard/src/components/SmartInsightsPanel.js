@@ -3,9 +3,39 @@ import React, { useState, useEffect } from 'react';
 const SmartInsightsPanel = ({ metrics }) => {
   const [insights, setInsights] = useState([]);
   const [riskLevel, setRiskLevel] = useState('Low');
+  const [apiInsights, setApiInsights] = useState(null);
+  const [apiLoading, setApiLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch real insights from API
+    const fetchInsights = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/insights');
+        if (response.ok) {
+          const data = await response.json();
+          setApiInsights(data);
+        }
+      } catch (err) {
+        console.log('API not available, using simulated insights');
+      } finally {
+        setApiLoading(false);
+      }
+    };
+
+    fetchInsights();
+    const interval = setInterval(fetchInsights, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Generate rule-based insights
   useEffect(() => {
+    // Use API insights if available
+    if (apiInsights && !apiLoading) {
+      setInsights(apiInsights.insights || []);
+      setRiskLevel(apiInsights.risk_level || 'Low');
+      return;
+    }
+
     if (!metrics) return;
 
     const newInsights = [];
@@ -120,7 +150,7 @@ const SmartInsightsPanel = ({ metrics }) => {
     } else {
       setRiskLevel('Low');
     }
-  }, [metrics]);
+  }, [metrics, apiInsights, apiLoading]);
 
   const getRiskColor = (level) => {
     switch (level) {
@@ -183,9 +213,9 @@ const SmartInsightsPanel = ({ metrics }) => {
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${insight.priority === 'critical' ? 'bg-red-500/20 text-red-300' :
-                    insight.priority === 'high' ? 'bg-orange-500/20 text-orange-300' :
-                      insight.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
-                        'bg-blue-500/20 text-blue-300'
+                  insight.priority === 'high' ? 'bg-orange-500/20 text-orange-300' :
+                    insight.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                      'bg-blue-500/20 text-blue-300'
                   }`}>
                   {insight.priority}
                 </span>

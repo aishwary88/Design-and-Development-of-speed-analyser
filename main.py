@@ -1,3 +1,17 @@
+# Calibration function for PIXELS_PER_METER
+def calibrate_pixels_per_meter(image_path, real_distance_meters):
+    """Calibrate PIXELS_PER_METER using a reference object in an image."""
+    import cv2
+    img = cv2.imread(image_path)
+    if img is None:
+        print(f"Error: Cannot read image - {image_path}")
+        return
+    print("Draw a line on the reference object (e.g., a car or road segment) and enter the pixel length.")
+    # For simplicity, ask user for pixel length
+    pixel_length = int(input("Enter pixel length of reference object: "))
+    ppm = pixel_length / real_distance_meters
+    print(f"Calibration complete. PIXELS_PER_METER = {ppm}")
+    return ppm
 import cv2
 import pytesseract
 import numpy as np
@@ -5,16 +19,21 @@ from ultralytics import YOLO
 import os
 import sys
 from datetime import datetime
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
+
+TESSERACT_PATH = os.getenv('TESSERACT_PATH', r'C:\Program Files\Tesseract-OCR\tesseract.exe')
 # Configure pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
+YOLO_MODEL_PATH = os.getenv('YOLO_MODEL_PATH', 'yolov8n.pt')
 # Load YOLO model for object detection
-model = YOLO('yolov8n.pt')
+model = YOLO(YOLO_MODEL_PATH)
 
-# Speed calculation parameters (calibrate based on your camera setup)
-PIXELS_PER_METER = 50  # Adjust based on camera resolution and distance
-FPS = 30
+PIXELS_PER_METER = int(os.getenv('PIXELS_PER_METER', 50))  # Adjust based on camera resolution and distance
+FPS = int(os.getenv('FPS', 30))
 
 # Track vehicles
 vehicle_tracker = {}

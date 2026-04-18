@@ -1,47 +1,41 @@
 import React, { useEffect, useState } from 'react';
 import ChartCard from './widgets/ChartCard';
 
-const TrafficSpeedAnalytics = () => {
+const TrafficSpeedAnalytics = ({ analyticsData, analyticsLoading }) => {
   const [analytics, setAnalytics] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate API call with mock data instead of actual fetch
-    const simulateApiCall = () => {
-      setTimeout(() => {
-        const mockAnalytics = {
-          speed_trend: Array.from({ length: 24 }, (_, i) => ({
-            hour: i,
-            speed: Math.floor(Math.random() * 30) + 40,
-            timestamp: `${i}:00`
-          })),
-          avg_speed_by_segment: [
-            { segment: 'Highway A1', speed: 75 },
-            { segment: 'Main Street', speed: 45 },
-            { segment: 'Business District', speed: 35 },
-            { segment: 'Residential', speed: 55 }
-          ],
-          traffic_distribution: [
-            { type: 'Cars', percentage: 65 },
-            { type: 'Trucks', percentage: 20 },
-            { type: 'Buses', percentage: 10 },
-            { type: 'Motorcycles', percentage: 5 }
-          ],
-          density_over_time: Array.from({ length: 12 }, (_, i) => ({
-            time: `${i * 2}:00`,
-            density: Math.floor(Math.random() * 40) + 30
-          }))
-        };
+    if (analyticsData && !analyticsLoading) {
+      setAnalytics(analyticsData);
+    } else {
+      // Fallback to mock data if API fails
+      setAnalytics({
+        speed_trend: Array.from({ length: 24 }, (_, i) => ({
+          hour: i,
+          speed: Math.floor(Math.random() * 30) + 40,
+          timestamp: `${i}:00`
+        })),
+        avg_speed_by_segment: [
+          { segment: 'Highway A1', speed: 75 },
+          { segment: 'Main Street', speed: 45 },
+          { segment: 'Business District', speed: 35 },
+          { segment: 'Residential', speed: 55 }
+        ],
+        traffic_distribution: [
+          { type: 'Cars', percentage: 65 },
+          { type: 'Trucks', percentage: 20 },
+          { type: 'Buses', percentage: 10 },
+          { type: 'Motorcycles', percentage: 5 }
+        ],
+        density_over_time: Array.from({ length: 12 }, (_, i) => ({
+          time: `${i * 2}:00`,
+          density: Math.floor(Math.random() * 40) + 30
+        }))
+      });
+    }
+  }, [analyticsData, analyticsLoading]);
 
-        setAnalytics(mockAnalytics);
-        setIsLoading(false);
-      }, 1000);
-    };
-
-    simulateApiCall();
-  }, []);
-
-  if (isLoading) {
+  if (analyticsLoading) {
     return (
       <section className="card p-6 animate-fade-in">
         <h2 className="text-xl font-bold neon mb-4">Traffic Speed Analytics</h2>

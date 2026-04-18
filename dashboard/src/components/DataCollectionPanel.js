@@ -1,8 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const DataCollectionPanel = () => {
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [dragActive, setDragActive] = useState(false);
+  const [recentUploads, setRecentUploads] = useState([]);
+
+  useEffect(() => {
+    // Fetch recent uploads from API
+    const fetchUploads = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/uploads');
+        if (response.ok) {
+          const data = await response.json();
+          setRecentUploads(data.uploads || []);
+        }
+      } catch (err) {
+        console.log('API not available, using simulated data');
+      }
+    };
+
+    fetchUploads();
+    const interval = setInterval(fetchUploads, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -24,13 +44,35 @@ const DataCollectionPanel = () => {
     }
   };
 
-  const handleFiles = (files) => {
+  const handleFiles = async (files) => {
     setUploadStatus('uploading');
-    // Simulate upload
-    setTimeout(() => {
-      setUploadStatus('success');
-      setTimeout(() => setUploadStatus('idle'), 2000);
-    }, 1500);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', files[0]);
+
+      const response = await fetch('http://localhost:5000/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        setUploadStatus('success');
+        // Add to recent uploads
+        setRecentUploads(prev => [{
+          name: files[0].name,
+          timestamp: new Date().toLocaleString(),
+          status: 'Processed'
+        }, ...prev]);
+      } else {
+        setUploadStatus('error');
+      }
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setUploadStatus('error');
+    }
+
+    setTimeout(() => setUploadStatus('idle'), 2000);
   };
 
   return (
@@ -93,33 +135,45 @@ const DataCollectionPanel = () => {
             </p>
           </>
         )}
+
+        {uploadStatus === 'error' && (
+          <>
+            <div className="text-4xl mb-4">❌</div>
+            <h3 className="text-lg font-medium text-red-400 mb-2">
+              Upload failed
+            </h3>
+            <p className="text-blue-400 text-sm">
+              Please try again or check your connection
+            </p>
+          </>
+        )}
       </div>
 
       {/* Recent Uploads */}
       <div className="mt-6">
         <h4 className="text-sm font-medium text-blue-300 mb-3">Recent Uploads</h4>
         <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
-            <div className="flex items-center gap-3">
-              <div className="text-lg">🎥</div>
-              <div>
-                <div className="text-sm font-medium text-blue-200">traffic_video_01.mp4</div>
-                <div className="text-xs text-blue-400">2 minutes ago</div>
+          {recentUploads.length > 0 ? (
+            recentUploads.map((upload, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
+                <div className="flex items-center gap-3">
+                  <div className="text-lg">{upload.name.endsWith('mp4') ? '🎥' : '📷'}</div>
+                  <div>
+                    <div className="text-sm font-medium text-blue-200">{upload.name}</div>
+                    <div className="text-xs text-blue-400">{upload.timestamp}</div>
+                  </div>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${upload.status === 'Processed' ? 'text-green-400 bg-green-500/20' :
+                  upload.status === 'Processing' ? 'text-yellow-400 bg-yellow-500/20' :
+                    'text-blue-400 bg-blue-500/20'
+                  }`}>
+                  {upload.status}
+                </span>
               </div>
-            </div>
-            <span className="text-xs text-green-400">✓ Processed</span>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
-            <div className="flex items-center gap-3">
-              <div className="text-lg">📷</div>
-              <div>
-                <div className="text-sm font-medium text-blue-200">intersection_photo.jpg</div>
-                <div className="text-xs text-blue-400">5 minutes ago</div>
-              </div>
-            </div>
-            <span className="text-xs text-yellow-400">⏳ Processing</span>
-          </div>
+            ))
+          ) : (
+            <div className="text-center py-4 text-blue-400 text-sm">No uploads yet</div>
+          )}
         </div>
       </div>
 

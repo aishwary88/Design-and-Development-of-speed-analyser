@@ -10,6 +10,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
 import zipfile
+import time
 
 # Configure pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -18,6 +19,11 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'avi', 'mov', 'mkv'}
+
+# Add cache busting
+@app.context_processor
+def inject_cache_buster():
+    return dict(cache_buster=str(int(time.time())))
 
 # allow zip for dataset uploads
 app.config['ALLOWED_EXTENSIONS'].add('zip')
@@ -254,6 +260,14 @@ def generate_camera_frames():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/landing')
+def landing():
+    return render_template('landing.html')
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
 
 @app.route('/api/camera/start', methods=['POST'])
 def start_camera():

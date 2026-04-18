@@ -12,8 +12,12 @@ import SmartInsightsPanel from './components/SmartInsightsPanel';
 import AdvancedFeatures from './components/AdvancedFeatures';
 import FutureReadyModules from './components/FutureReadyModules';
 import HeatmapPanel from './components/widgets/HeatmapPanel';
+import { useMetrics, useAnalytics } from './hooks/useApi';
 
 function App() {
+  const { data: metricsData, loading: metricsLoading } = useMetrics();
+  const { data: analyticsData, loading: analyticsLoading } = useAnalytics();
+
   const [dashboardData, setDashboardData] = useState({
     vehicles: [],
     metrics: {
@@ -27,6 +31,23 @@ function App() {
     isLive: false,
     lastUpdate: new Date()
   });
+
+  // Update dashboard data when API data loads
+  useEffect(() => {
+    if (metricsData && !metricsLoading) {
+      setDashboardData(prev => ({
+        ...prev,
+        metrics: {
+          totalVehicles: metricsData.total_vehicles || prev.metrics.totalVehicles,
+          avgSpeed: metricsData.avg_speed || prev.metrics.avgSpeed,
+          overspeedViolations: prev.metrics.overspeedViolations,
+          speedCompliance: parseInt(metricsData.speed_compliance?.replace('%', '') || prev.metrics.speedCompliance),
+          trafficStabilityIndex: prev.metrics.trafficStabilityIndex,
+          riskIndicator: prev.metrics.riskIndicator
+        }
+      }));
+    }
+  }, [metricsData, metricsLoading]);
 
   // Simulate real-time data updates
   useEffect(() => {
@@ -65,7 +86,7 @@ function App() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2 space-y-8">
             <CentralVisualization vehicles={dashboardData.vehicles} />
-            <TrafficSpeedAnalytics />
+            <TrafficSpeedAnalytics analyticsData={analyticsData} analyticsLoading={analyticsLoading} />
           </div>
           <div className="space-y-8">
             <DataCollectionPanel />

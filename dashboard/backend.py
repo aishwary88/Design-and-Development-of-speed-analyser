@@ -1,7 +1,10 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import pandas as pd
 import numpy as np
+import os
+from datetime import datetime
 
 app = FastAPI()
 
@@ -9,8 +12,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"] ,
-    allow_headers=["*"] ,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.post("/upload-csv")
@@ -42,3 +45,50 @@ def get_analytics():
         "traffic_distribution": [40, 30, 20, 10],
         "density_over_time": [0.68, 0.72, 0.65, 0.70, 0.69]
     }
+
+@app.get("/api/insights")
+def get_insights():
+    # Generate insights based on current metrics
+    return {
+        "insights": [
+            {
+                "type": "success",
+                "icon": "✅",
+                "title": "Excellent Compliance",
+                "message": "Speed compliance rates are performing well",
+                "priority": "low"
+            },
+            {
+                "type": "info",
+                "icon": "🌅",
+                "title": "Morning Rush Hour",
+                "message": "Peak traffic period - monitor congestion levels",
+                "priority": "low"
+            }
+        ],
+        "risk_level": "Low"
+    }
+
+@app.get("/api/uploads")
+def get_uploads():
+    # Return recent uploads
+    return {
+        "uploads": [
+            {"name": "traffic_video_01.mp4", "timestamp": "2 minutes ago", "status": "Processed"},
+            {"name": "intersection_photo.jpg", "timestamp": "5 minutes ago", "status": "Processing"}
+        ]
+    }
+
+@app.get("/api/camera/status")
+def get_camera_status():
+    # Return camera status
+    return {
+        "is_processing": True,
+        "vehicle_count": 15,
+        "fps": 30,
+        "status": "active"
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

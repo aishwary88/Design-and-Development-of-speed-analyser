@@ -10,6 +10,29 @@ const CentralVisualization = ({ vehicles = [] }) => {
   });
 
   useEffect(() => {
+    // Fetch real vehicle data from API
+    const fetchVehicleData = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/camera/status');
+        if (response.ok) {
+          const data = await response.json();
+          setLiveDetection(prev => ({
+            ...prev,
+            vehicleCount: data.vehicle_count || prev.vehicleCount,
+            isProcessing: data.is_processing || prev.isProcessing
+          }));
+        }
+      } catch (err) {
+        console.log('API not available, using simulated data');
+      }
+    };
+
+    fetchVehicleData();
+    const interval = setInterval(fetchVehicleData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     // Simulate active traffic nodes
     const interval = setInterval(() => {
       setActiveNodes(prev => {
