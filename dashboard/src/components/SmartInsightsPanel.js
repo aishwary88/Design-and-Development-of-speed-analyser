@@ -1,156 +1,52 @@
 import React, { useState, useEffect } from 'react';
+import { useInsights, useRecords } from '../hooks/useApi';
 
 const SmartInsightsPanel = ({ metrics }) => {
+  const { data: insightsData, loading } = useInsights();
+  const { data: recordsData } = useRecords();
   const [insights, setInsights] = useState([]);
   const [riskLevel, setRiskLevel] = useState('Low');
-  const [apiInsights, setApiInsights] = useState(null);
-  const [apiLoading, setApiLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch real insights from API
-    const fetchInsights = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/insights');
-        if (response.ok) {
-          const data = await response.json();
-          setApiInsights(data);
-        }
-      } catch (err) {
-        console.log('API not available, using simulated insights');
-      } finally {
-        setApiLoading(false);
+    if (insightsData) {
+      setInsights(insightsData.insights || []);
+      setRiskLevel(insightsData.risk_level || 'Low');
+    }
+  }, [insightsData]);
+
+  // Generate insights based on actual violation data
+  useEffect(() => {
+    if (recordsData && recordsData.violations && recordsData.violations.length > 0) {
+      const violations = recordsData.violations;
+      const highSpeedViolations = violations.filter(v => v.speed > 90);
+
+      if (highSpeedViolations.length > 0) {
+        setInsights(prev => [
+          {
+            type: 'danger',
+            icon: '🚨',
+            title: 'Critical Speed Violation',
+            message: `${highSpeedViolations.length} vehicles exceeded 90 km/h`,
+            priority: 'critical'
+          },
+          ...prev
+        ]);
       }
-    };
 
-    fetchInsights();
-    const interval = setInterval(fetchInsights, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Generate rule-based insights
-  useEffect(() => {
-    // Use API insights if available
-    if (apiInsights && !apiLoading) {
-      setInsights(apiInsights.insights || []);
-      setRiskLevel(apiInsights.risk_level || 'Low');
-      return;
+      if (violations.length > 5) {
+        setInsights(prev => [
+          {
+            type: 'warning',
+            icon: '⚠️',
+            title: 'High Violation Rate',
+            message: `${violations.length} total overspeeding violations`,
+            priority: 'high'
+          },
+          ...prev
+        ]);
+      }
     }
-
-    if (!metrics) return;
-
-    const newInsights = [];
-
-    // Speed-based insights
-    if (metrics.avgSpeed > 80) {
-      newInsights.push({
-        type: 'warning',
-        icon: '⚠️',
-        title: 'High Speed Alert',
-        message: 'Average speed exceeds safe limits on main routes',
-        priority: 'high'
-      });
-    }
-
-    if (metrics.overspeedViolations > 5) {
-      newInsights.push({
-        type: 'danger',
-        icon: '🚨',
-        title: 'Multiple Violations',
-        message: 'Frequent overspeeding detected - enforcement needed',
-        priority: 'critical'
-      });
-    }
-
-    // Traffic stability insights
-    if (metrics.trafficStabilityIndex < 70) {
-      newInsights.push({
-        type: 'warning',
-        icon: '📊',
-        title: 'Traffic Instability',
-        message: 'Irregular traffic patterns detected',
-        priority: 'medium'
-      });
-    }
-
-    // Compliance insights
-    if (metrics.speedCompliance < 80) {
-      newInsights.push({
-        type: 'info',
-        icon: '📋',
-        title: 'Compliance Issue',
-        message: 'Speed compliance below target threshold',
-        priority: 'medium'
-      });
-    }
-
-    // Time-based insights
-    const hour = new Date().getHours();
-    if (hour >= 7 && hour <= 9) {
-      newInsights.push({
-        type: 'info',
-        icon: '🌅',
-        title: 'Morning Rush Hour',
-        message: 'Peak traffic period - monitor congestion levels',
-        priority: 'low'
-      });
-    } else if (hour >= 17 && hour <= 19) {
-      newInsights.push({
-        type: 'info',
-        icon: '🌆',
-        title: 'Evening Rush Hour',
-        message: 'High congestion expected in evening hours',
-        priority: 'low'
-      });
-    }
-
-    // Positive insights
-    if (metrics.speedCompliance > 90) {
-      newInsights.push({
-        type: 'success',
-        icon: '✅',
-        title: 'Excellent Compliance',
-        message: 'Speed compliance rates are performing well',
-        priority: 'low'
-      });
-    }
-
-    if (metrics.trafficStabilityIndex > 85) {
-      newInsights.push({
-        type: 'success',
-        icon: '🎯',
-        title: 'Stable Traffic Flow',
-        message: 'Traffic patterns are consistent and predictable',
-        priority: 'low'
-      });
-    }
-
-    // Sudden changes
-    if (Math.random() > 0.8) { // Simulate occasional alerts
-      newInsights.push({
-        type: 'warning',
-        icon: '🔄',
-        title: 'Pattern Change Detected',
-        message: 'Sudden speed drop detected - possible blockage',
-        priority: 'high'
-      });
-    }
-
-    setInsights(newInsights.slice(0, 6)); // Limit to 6 insights
-
-    // Determine overall risk level
-    const criticalCount = newInsights.filter(i => i.priority === 'critical').length;
-    const highCount = newInsights.filter(i => i.priority === 'high').length;
-
-    if (criticalCount > 0) {
-      setRiskLevel('Critical');
-    } else if (highCount > 1) {
-      setRiskLevel('High');
-    } else if (highCount > 0 || metrics.overspeedViolations > 3) {
-      setRiskLevel('Medium');
-    } else {
-      setRiskLevel('Low');
-    }
-  }, [metrics, apiInsights, apiLoading]);
+  }, [recordsData]);
 
   const getRiskColor = (level) => {
     switch (level) {

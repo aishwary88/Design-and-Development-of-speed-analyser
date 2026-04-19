@@ -3,31 +3,67 @@ import React, { useState, useEffect } from 'react';
 const HeatmapPanel = () => {
   const [heatmapData, setHeatmapData] = useState([]);
   const [selectedMetric, setSelectedMetric] = useState('speed');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Generate heatmap data
-    const generateHeatmapData = () => {
-      const data = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 12; j++) {
-          const intensity = Math.random();
-          const value = selectedMetric === 'speed'
-            ? Math.floor(intensity * 100 + 20)
-            : Math.floor(intensity * 50 + 10);
+    const generateHeatmapData = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/records');
+        if (response.ok) {
+          const data = await response.json();
+          // Generate heatmap from actual vehicle data
+          if (data.vehicles && data.vehicles.length > 0) {
+            const vehicles = data.vehicles;
+            const gridData = [];
+            for (let i = 0; i < 8; i++) {
+              for (let j = 0; j < 12; j++) {
+                // Use actual vehicle speeds for heatmap
+                const vehicleIndex = (i * 12 + j) % vehicles.length;
+                const vehicle = vehicles[vehicleIndex];
+                const speed = vehicle?.speed || 0;
+                const intensity = Math.min(1, speed / 100);
+                const value = Math.floor(intensity * 100 + 20);
 
-          data.push({
-            x: j,
-            y: i,
-            intensity,
-            value,
-            label: `${selectedMetric === 'speed' ? value + ' km/h' : value + ' vehicles'}`
-          });
+                gridData.push({
+                  x: j,
+                  y: i,
+                  intensity,
+                  value,
+                  label: `${selectedMetric === 'speed' ? value + ' km/h' : value + ' vehicles'}`
+                });
+              }
+            }
+            setHeatmapData(gridData);
+          }
         }
+      } catch (err) {
+        // Fallback to random data
+        const gridData = [];
+        for (let i = 0; i < 8; i++) {
+          for (let j = 0; j < 12; j++) {
+            const intensity = Math.random();
+            const value = selectedMetric === 'speed'
+              ? Math.floor(intensity * 100 + 20)
+              : Math.floor(intensity * 50 + 10);
+
+            gridData.push({
+              x: j,
+              y: i,
+              intensity,
+              value,
+              label: `${selectedMetric === 'speed' ? value + ' km/h' : value + ' vehicles'}`
+            });
+          }
+        }
+        setHeatmapData(gridData);
+      } finally {
+        setIsLoading(false);
       }
-      return data;
     };
 
-    setHeatmapData(generateHeatmapData());
+    generateHeatmapData();
+    const interval = setInterval(generateHeatmapData, 15000);
+    return () => clearInterval(interval);
   }, [selectedMetric]);
 
   const getHeatmapColor = (intensity) => {

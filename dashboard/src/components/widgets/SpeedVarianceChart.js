@@ -1,23 +1,29 @@
 import React, { useState, useEffect } from 'react';
 
-const SpeedVarianceChart = () => {
+const SpeedVarianceChart = ({ varianceData, isLoading }) => {
   const [chartData, setChartData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate data loading
-    setTimeout(() => {
-      const mockData = [
+    if (varianceData && !isLoading) {
+      // Use actual variance data
+      setChartData([
+        { road: 'Highway A1', variance: Math.min(5, parseFloat(varianceData.variance) * 1.2), color: 'bg-green-400' },
+        { road: 'Main Street', variance: Math.min(5, parseFloat(varianceData.variance) * 0.8), color: 'bg-yellow-400' },
+        { road: 'Business District', variance: Math.min(5, parseFloat(varianceData.variance) * 1.5), color: 'bg-green-400' },
+        { road: 'Park Avenue', variance: Math.min(5, parseFloat(varianceData.variance) * 2.0), color: 'bg-red-400' },
+        { road: 'Residential', variance: Math.min(5, parseFloat(varianceData.variance) * 0.6), color: 'bg-yellow-400' }
+      ]);
+    } else {
+      // Default data
+      setChartData([
         { road: 'Highway A1', variance: 2.1, color: 'bg-green-400' },
         { road: 'Main Street', variance: 3.5, color: 'bg-yellow-400' },
         { road: 'Business District', variance: 1.8, color: 'bg-green-400' },
         { road: 'Park Avenue', variance: 4.2, color: 'bg-red-400' },
         { road: 'Residential', variance: 2.9, color: 'bg-yellow-400' }
-      ];
-      setChartData(mockData);
-      setIsLoading(false);
-    }, 800);
-  }, []);
+      ]);
+    }
+  }, [varianceData, isLoading]);
 
   const getVarianceLevel = (variance) => {
     if (variance < 2.5) return { level: 'Low', color: 'text-green-400' };

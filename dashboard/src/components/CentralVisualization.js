@@ -1,19 +1,175 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useCameraControl, useCameraStatus, useRecords, useCameraStream } from '../hooks/useApi';
 
 const CentralVisualization = ({ vehicles = [] }) => {
-  const [activeNodes, setActiveNodes] = useState([]);
-  const [trafficFlow, setTrafficFlow] = useState(0);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const { start, stop } = useCameraControl();
+  const { data: cameraStatus } = useCameraStatus();
+  const { data: recordsData } = useRecords();
+  const { streamUrl } = useCameraStream();
+
   const [liveDetection, setLiveDetection] = useState({
     vehicleCount: 0,
     detectedPlates: [],
-    isProcessing: false
+    isProcessing: false,
+    cameraActive: false,
+    streamError: null
   });
+  const [currentVideo, setCurrentVideo] = useState(null);
+  const animationRef = useRef(null);
 
+  // Handle camera stream
   useEffect(() => {
-    // Fetch real vehicle data from API
+    let stream = null;
+
+    const startCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play();
+            setLiveDetection(prev => ({ ...prev, cameraActive: true, streamError: null }));
+            startCameraProcessing();
+          };
+        }
+      } catch (err) {
+        console.error('Camera error:', err);
+        setLiveDetection(prev => ({ ...prev, cameraActive: false, streamError: 'Camera access denied or not available' }));
+      }
+    };
+
+    const stopCamera = () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      setLiveDetection(prev => ({ ...prev, cameraActive: false }));
+    };
+
+    if (liveDetection.cameraActive && !currentVideo) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+
+    return () => stopCamera();
+  }, [liveDetection.cameraActive, currentVideo]);
+
+  // Start camera processing loop
+  const startCameraProcessing = () => {
+    const processFrame = () => {
+      if (videoRef.current && canvasRef.current && liveDetection.cameraActive && !currentVideo) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          drawDetectionOverlay(ctx, canvas.width, canvas.height);
+        }
+      }
+
+      if (liveDetection.cameraActive && !currentVideo) {
+        animationRef.current = requestAnimationFrame(processFrame);
+      }
+    };
+
+    processFrame();
+  };
+
+  // Draw detection overlay
+  const drawDetectionOverlay = (ctx, width, height) => {
+    // Draw grid
+    ctx.strokeStyle = 'rgba(0, 191, 255, 0.2)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 80) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 80) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // Draw simulated detection boxes (in production, use actual YOLO results)
+    const numVehicles = Math.min(3, Math.floor(Math.random() * 3) + 1);
+
+    for (let i = 0; i < numVehicles; i++) {
+      const x = 100 + (i * 150) % (width - 200);
+      const y = 100 + (Math.sin((Date.now() / 1000) + i) * 50);
+      const boxWidth = 80;
+      const boxHeight = 50;
+
+      ctx.strokeStyle = 'rgba(0, 255, 0, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, boxWidth, boxHeight);
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.fillRect(x, y - 20, boxWidth, 18);
+
+      ctx.fillStyle = '#00ff00';
+      ctx.font = '12px monospace';
+      ctx.fillText(`Car: ${(85 + Math.random() * 14).toFixed(0)}%`, x + 2, y - 6);
+    }
+  };
+
+  // Handle camera control toggle
+  const toggleCamera = () => {
+    if (liveDetection.cameraActive && !currentVideo) {
+      stop();
+      setLiveDetection(prev => ({ ...prev, cameraActive: false }));
+    } else if (!currentVideo) {
+      start();
+      setLiveDetection(prev => ({ ...prev, cameraActive: true }));
+    }
+  };
+
+  // Handle video file upload for processing
+  const handleVideoUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setCurrentVideo({
+            url: result.download_url,
+            detections: result.detections,
+            totalFrames: result.total_frames
+          });
+          setLiveDetection(prev => ({ ...prev, cameraActive: false }));
+        }
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+    }
+  };
+
+  // Fetch real vehicle data from API
+  useEffect(() => {
     const fetchVehicleData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/camera/status');
+        const response = await fetch('http://localhost:8000/api/camera/status');
         if (response.ok) {
           const data = await response.json();
           setLiveDetection(prev => ({
@@ -32,42 +188,19 @@ const CentralVisualization = ({ vehicles = [] }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Use actual vehicles data from records
   useEffect(() => {
-    // Simulate active traffic nodes
-    const interval = setInterval(() => {
-      setActiveNodes(prev => {
-        const newNodes = [...prev];
-        const randomNode = Math.floor(Math.random() * 8);
-        if (newNodes.includes(randomNode)) {
-          return newNodes.filter(n => n !== randomNode);
-        } else {
-          return [...newNodes, randomNode].slice(-4); // Keep max 4 active
-        }
-      });
-      setTrafficFlow(prev => (prev + 1) % 360);
-    }, 800);
+    if (recordsData && recordsData.vehicles && recordsData.vehicles.length > 0) {
+      const plates = recordsData.vehicles.slice(0, 4).map(v => v.plate || `PLATE-${Math.floor(Math.random() * 1000)}`);
+      setLiveDetection(prev => ({
+        ...prev,
+        detectedPlates: plates,
+        vehicleCount: recordsData.vehicles.length
+      }));
+    }
+  }, [recordsData]);
 
-    return () => clearInterval(interval);
-  }, []);
-
-  // Simulate live detection updates
-  useEffect(() => {
-    const detectionInterval = setInterval(() => {
-      setLiveDetection({
-        vehicleCount: Math.floor(Math.random() * 12) + 3,
-        detectedPlates: [
-          'ABC-123',
-          'XYZ-789',
-          'DEF-456',
-          'GHI-012'
-        ].slice(0, Math.floor(Math.random() * 4) + 1),
-        isProcessing: Math.random() > 0.7
-      });
-    }, 2000);
-
-    return () => clearInterval(detectionInterval);
-  }, []);
-
+  // Traffic network visualization state
   const nodePositions = [
     { x: 60, y: 60, label: 'Junction A' },
     { x: 160, y: 60, label: 'Junction B' },
@@ -79,6 +212,26 @@ const CentralVisualization = ({ vehicles = [] }) => {
     { x: 110, y: 190, label: 'Junction H' }
   ];
 
+  const [activeNodes, setActiveNodes] = useState([]);
+  const [trafficFlow, setTrafficFlow] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveNodes(prev => {
+        const newNodes = [...prev];
+        const randomNode = Math.floor(Math.random() * 8);
+        if (newNodes.includes(randomNode)) {
+          return newNodes.filter(n => n !== randomNode);
+        } else {
+          return [...newNodes, randomNode].slice(-4);
+        }
+      });
+      setTrafficFlow(prev => (prev + 1) % 360);
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <section className="card p-8 animate-slide-up">
       <div className="text-center mb-6">
@@ -87,38 +240,104 @@ const CentralVisualization = ({ vehicles = [] }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
         {/* Live Detection Feed */}
         <div className="space-y-6">
-          {/* Video Feed Placeholder */}
+          {/* Video Feed with Camera Control */}
           <div className="relative bg-gradient-to-br from-gray-900 to-black rounded-lg border border-blue-500/30 aspect-video flex items-center justify-center overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-transparent"></div>
 
-            {/* Simulated Detection Overlay */}
-            <div className="relative w-full h-full flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-blue-300 text-sm">Live Camera Feed</p>
-                <p className="text-blue-400 text-xs">YOLOv8 Processing Active</p>
-              </div>
+            {/* Video Element */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute inset-0 w-full h-full object-cover opacity-50"
+            />
+
+            {/* Canvas for Detection Overlay */}
+            <canvas
+              ref={canvasRef}
+              width={640}
+              height={480}
+              className="absolute inset-0 w-full h-full pointer-events-none"
+            />
+
+            {/* Camera Status Overlay */}
+            <div className="relative z-10 w-full h-full flex items-center justify-center">
+              {!liveDetection.cameraActive && !currentVideo && !liveDetection.streamError && (
+                <div className="text-center">
+                  <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-blue-300 text-sm">Camera Feed Ready</p>
+                  <p className="text-blue-400 text-xs">Click "Start Camera" to begin</p>
+                </div>
+              )}
+
+              {liveDetection.streamError && (
+                <div className="text-center">
+                  <p className="text-red-400 text-sm mb-2">{liveDetection.streamError}</p>
+                  <p className="text-blue-400 text-xs">Using simulated detection</p>
+                </div>
+              )}
 
               {/* Detection Boxes Simulation */}
-              <div className="absolute top-4 left-4 w-20 h-12 border-2 border-green-400 rounded">
-                <div className="absolute -top-6 left-0 text-xs text-green-400 bg-black/50 px-1 rounded">
-                  Car: 95%
+              {liveDetection.cameraActive && !currentVideo && (
+                <div className="absolute top-4 left-4 w-20 h-12 border-2 border-green-400 rounded">
+                  <div className="absolute -top-6 left-0 text-xs text-green-400 bg-black/50 px-1 rounded">
+                    Car: 95%
+                  </div>
                 </div>
-              </div>
-              <div className="absolute top-16 right-8 w-16 h-10 border-2 border-cyan-400 rounded">
-                <div className="absolute -top-6 left-0 text-xs text-cyan-400 bg-black/50 px-1 rounded">
-                  Bus: 87%
+              )}
+              {liveDetection.cameraActive && !currentVideo && (
+                <div className="absolute top-16 right-8 w-16 h-10 border-2 border-cyan-400 rounded">
+                  <div className="absolute -top-6 left-0 text-xs text-cyan-400 bg-black/50 px-1 rounded">
+                    Bus: 87%
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Video Player for Processed Files */}
+              {currentVideo && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <video
+                    src={`http://localhost:8000${currentVideo.url}`}
+                    controls
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Live Indicator */}
-            <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/70 px-3 py-1 rounded-full">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-              <span className="text-white text-xs font-medium">LIVE</span>
+            <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/70 px-3 py-1 rounded-full z-20">
+              <div className={`w-2 h-2 rounded-full animate-pulse ${liveDetection.cameraActive && !currentVideo ? 'bg-red-500' : 'bg-green-400'}`}></div>
+              <span className="text-white text-xs font-medium">{liveDetection.cameraActive && !currentVideo ? 'LIVE' : 'IDLE'}</span>
+            </div>
+
+            {/* Camera Control Button */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
+              <button
+                onClick={toggleCamera}
+                className={`px-6 py-2 rounded-full font-semibold transition-all duration-300 ${liveDetection.cameraActive && !currentVideo
+                  ? 'bg-red-500/80 hover:bg-red-600/80 text-white'
+                  : 'bg-green-500/80 hover:bg-green-600/80 text-white'
+                  }`}
+              >
+                {liveDetection.cameraActive && !currentVideo ? 'Stop Camera' : 'Start Camera'}
+              </button>
+            </div>
+
+            {/* File Upload Button */}
+            <div className="absolute bottom-14 left-1/2 transform -translate-x-1/2 z-20">
+              <label className="px-6 py-2 bg-cyan-500/80 hover:bg-cyan-600/80 text-white rounded-full font-semibold transition-all duration-300 cursor-pointer">
+                Upload Video
+                <input
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleVideoUpload}
+                />
+              </label>
             </div>
           </div>
 
@@ -164,8 +383,6 @@ const CentralVisualization = ({ vehicles = [] }) => {
           <div className="flex justify-center">
             <div className="relative">
               <svg width="240" height="240" viewBox="0 0 240 240" className="drop-shadow-2xl">
-
-                {/* Background Grid */}
                 <defs>
                   <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
                     <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(0,191,255,0.1)" strokeWidth="0.5" />

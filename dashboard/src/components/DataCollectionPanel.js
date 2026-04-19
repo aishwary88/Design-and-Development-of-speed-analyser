@@ -1,28 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useUploadFile, useRecords } from '../hooks/useApi';
 
 const DataCollectionPanel = () => {
   const [uploadStatus, setUploadStatus] = useState('idle');
   const [dragActive, setDragActive] = useState(false);
-  const [recentUploads, setRecentUploads] = useState([]);
-
-  useEffect(() => {
-    // Fetch recent uploads from API
-    const fetchUploads = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/uploads');
-        if (response.ok) {
-          const data = await response.json();
-          setRecentUploads(data.uploads || []);
-        }
-      } catch (err) {
-        console.log('API not available, using simulated data');
-      }
-    };
-
-    fetchUploads();
-    const interval = setInterval(fetchUploads, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const { upload, loading, error } = useUploadFile();
+  const { data: recordsData } = useRecords();
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -40,40 +23,26 @@ const DataCollectionPanel = () => {
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFiles(e.dataTransfer.files);
+      handleFiles(e.dataTransfer.files[0]);
     }
   };
 
-  const handleFiles = async (files) => {
+  const handleFiles = async (file) => {
     setUploadStatus('uploading');
-
     try {
-      const formData = new FormData();
-      formData.append('file', files[0]);
-
-      const response = await fetch('http://localhost:5000/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
+      const result = await upload(file);
+      if (result.success) {
         setUploadStatus('success');
-        // Add to recent uploads
-        setRecentUploads(prev => [{
-          name: files[0].name,
-          timestamp: new Date().toLocaleString(),
-          status: 'Processed'
-        }, ...prev]);
-      } else {
-        setUploadStatus('error');
+        setTimeout(() => setUploadStatus('idle'), 3000);
       }
     } catch (err) {
-      console.error('Upload failed:', err);
       setUploadStatus('error');
+      console.error('Upload error:', err);
     }
-
-    setTimeout(() => setUploadStatus('idle'), 2000);
   };
+
+  // Get recent uploads from records
+  const recentUploads = recordsData?.vehicles?.slice(0, 5) || [];
 
   return (
     <section className="card p-6 animate-slide-up">
@@ -106,9 +75,14 @@ const DataCollectionPanel = () => {
             <p className="text-blue-400 text-sm mb-4">
               Supports MP4, AVI, JPG, PNG files
             </p>
-            <button className="px-6 py-2 bg-blue-500/20 text-blue-300 rounded-lg border border-blue-500/30 hover:bg-blue-500/30 transition-all">
+            <label className="px-6 py-2 bg-blue-500/20 text-blue-300 rounded-lg border border-blue-500/30 hover:bg-blue-500/30 transition-all cursor-pointer inline-block">
               Choose Files
-            </button>
+              <input
+                type="file"
+                className="hidden"
+                onChange={(e) => e.target.files && handleFiles(e.target.files[0])}
+              />
+            </label>
           </>
         )}
 
@@ -142,8 +116,8 @@ const DataCollectionPanel = () => {
             <h3 className="text-lg font-medium text-red-400 mb-2">
               Upload failed
             </h3>
-            <p className="text-blue-400 text-sm">
-              Please try again or check your connection
+            <p className="text-red-400 text-sm">
+              {error || 'Please try again'}
             </p>
           </>
         )}
@@ -154,25 +128,22 @@ const DataCollectionPanel = () => {
         <h4 className="text-sm font-medium text-blue-300 mb-3">Recent Uploads</h4>
         <div className="space-y-2">
           {recentUploads.length > 0 ? (
-            recentUploads.map((upload, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
+            recentUploads.map((vehicle, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg border border-blue-500/20">
                 <div className="flex items-center gap-3">
-                  <div className="text-lg">{upload.name.endsWith('mp4') ? '🎥' : '📷'}</div>
+                  <div className="text-lg">🚗</div>
                   <div>
-                    <div className="text-sm font-medium text-blue-200">{upload.name}</div>
-                    <div className="text-xs text-blue-400">{upload.timestamp}</div>
+                    <div className="text-sm font-medium text-blue-200">Vehicle #{vehicle.id}</div>
+                    <div className="text-xs text-blue-400">{vehicle.plate || 'N/A'} - {vehicle.speed} km/h</div>
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${upload.status === 'Processed' ? 'text-green-400 bg-green-500/20' :
-                  upload.status === 'Processing' ? 'text-yellow-400 bg-yellow-500/20' :
-                    'text-blue-400 bg-blue-500/20'
-                  }`}>
-                  {upload.status}
-                </span>
+                <span className="text-xs text-green-400">✓ Processed</span>
               </div>
             ))
           ) : (
-            <div className="text-center py-4 text-blue-400 text-sm">No uploads yet</div>
+            <div className="text-center py-4">
+              <p className="text-blue-400 text-sm">No uploads yet</p>
+            </div>
           )}
         </div>
       </div>
@@ -180,16 +151,16 @@ const DataCollectionPanel = () => {
       {/* Quick Stats */}
       <div className="mt-6 grid grid-cols-3 gap-4">
         <div className="text-center">
-          <div className="text-lg font-bold text-cyan-400">24</div>
-          <div className="text-xs text-blue-400">Files Today</div>
+          <div className="text-lg font-bold text-cyan-400">{recordsData?.total_vehicles || 0}</div>
+          <div className="text-xs text-blue-400">Total Vehicles</div>
         </div>
         <div className="text-center">
-          <div className="text-lg font-bold text-green-400">156</div>
-          <div className="text-xs text-blue-400">Total Processed</div>
+          <div className="text-lg font-bold text-green-400">{recordsData?.total_violations || 0}</div>
+          <div className="text-xs text-blue-400">Violations</div>
         </div>
         <div className="text-center">
-          <div className="text-lg font-bold text-blue-400">2.1GB</div>
-          <div className="text-xs text-blue-400">Storage Used</div>
+          <div className="text-lg font-bold text-blue-400">{recordsData?.vehicles?.length || 0}</div>
+          <div className="text-xs text-blue-400">Current Session</div>
         </div>
       </div>
     </section>

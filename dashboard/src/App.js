@@ -12,12 +12,10 @@ import SmartInsightsPanel from './components/SmartInsightsPanel';
 import AdvancedFeatures from './components/AdvancedFeatures';
 import FutureReadyModules from './components/FutureReadyModules';
 import HeatmapPanel from './components/widgets/HeatmapPanel';
-import { useMetrics, useAnalytics } from './hooks/useApi';
+import CsvDataMonitor from './components/CsvDataMonitor';
+import { useMetrics, useAnalytics, useInsights, useRecords, useCameraStatus, useCsvSummary, useSpeedVariance, useCongestion } from './hooks/useApi';
 
 function App() {
-  const { data: metricsData, loading: metricsLoading } = useMetrics();
-  const { data: analyticsData, loading: analyticsLoading } = useAnalytics();
-
   const [dashboardData, setDashboardData] = useState({
     vehicles: [],
     metrics: {
@@ -32,43 +30,59 @@ function App() {
     lastUpdate: new Date()
   });
 
-  // Update dashboard data when API data loads
+  // Fetch real data from backend
+  const { data: metricsData, loading: metricsLoading, error: metricsError } = useMetrics();
+  const { data: analyticsData, loading: analyticsLoading, error: analyticsError } = useAnalytics();
+  const { data: insightsData, loading: insightsLoading, error: insightsError } = useInsights();
+  const { data: recordsData, loading: recordsLoading, error: recordsError } = useRecords();
+  const { data: cameraStatus, loading: cameraLoading, error: cameraError } = useCameraStatus();
+  const { data: csvSummary, loading: csvLoading, error: csvError } = useCsvSummary();
+  const { data: speedVariance, loading: varianceLoading, error: varianceError } = useSpeedVariance();
+  const { data: congestionData, loading: congestionLoading, error: congestionError } = useCongestion();
+
+  // Update dashboard data from API
   useEffect(() => {
-    if (metricsData && !metricsLoading) {
+    if (metricsData && insightsData) {
       setDashboardData(prev => ({
         ...prev,
         metrics: {
-          totalVehicles: metricsData.total_vehicles || prev.metrics.totalVehicles,
-          avgSpeed: metricsData.avg_speed || prev.metrics.avgSpeed,
-          overspeedViolations: prev.metrics.overspeedViolations,
-          speedCompliance: parseInt(metricsData.speed_compliance?.replace('%', '') || prev.metrics.speedCompliance),
-          trafficStabilityIndex: prev.metrics.trafficStabilityIndex,
-          riskIndicator: prev.metrics.riskIndicator
+          ...prev.metrics,
+          totalVehicles: metricsData.total_vehicles || 0,
+          avgSpeed: metricsData.avg_speed || 0,
+          overspeedViolations: metricsData.violations_count || 0,
+          speedCompliance: parseInt(metricsData.speed_compliance?.replace('%', '') || 0),
+          trafficStabilityIndex: 85,
+          riskIndicator: insightsData?.risk_level || 'Low'
         }
       }));
     }
-  }, [metricsData, metricsLoading]);
+  }, [metricsData, insightsData]);
 
-  // Simulate real-time data updates
+  // Update from CSV summary
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (csvSummary && csvSummary.total_vehicles > 0) {
       setDashboardData(prev => ({
         ...prev,
-        lastUpdate: new Date(),
         metrics: {
           ...prev.metrics,
-          totalVehicles: Math.floor(Math.random() * 50) + 20,
-          avgSpeed: Math.floor(Math.random() * 30) + 45,
-          overspeedViolations: Math.floor(Math.random() * 8),
-          speedCompliance: Math.floor(Math.random() * 20) + 80,
-          trafficStabilityIndex: Math.floor(Math.random() * 20) + 75,
-          riskIndicator: Math.random() > 0.7 ? 'Medium' : 'Low'
+          totalVehicles: csvSummary.total_vehicles,
+          avgSpeed: csvSummary.avg_speed,
+          overspeedViolations: csvSummary.violations
         }
       }));
-    }, 3000);
+    }
+  }, [csvSummary]);
 
-    return () => clearInterval(interval);
-  }, []);
+  // Real-time updates from camera status
+  useEffect(() => {
+    if (cameraStatus) {
+      setDashboardData(prev => ({
+        ...prev,
+        isLive: cameraStatus.is_processing || false,
+        vehicles: recordsData?.vehicles || []
+      }));
+    }
+  }, [cameraStatus, recordsData]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-[#0a0f1c] to-[#1a2332] text-blue-100">
@@ -91,6 +105,7 @@ function App() {
           <div className="space-y-8">
             <DataCollectionPanel />
             <SmartInsightsPanel metrics={dashboardData.metrics} />
+            <CsvDataMonitor />
           </div>
         </div>
 

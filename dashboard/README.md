@@ -1,49 +1,145 @@
 # Traffic Speed Analyser Dashboard
 
-## Overview
-A modern, professional real-time analytics dashboard for the Traffic Speed Analyser System. Built with React and featuring a smart-city style dark theme with neon blue/cyan highlights.
+A real-time vehicle analytics dashboard featuring live speed detection, license plate recognition, and intelligent traffic insights using YOLOv8 and Tesseract OCR.
 
 ## Features
 
-### 🎯 Core Dashboard Components
-- **Live Detection Panel**: Real-time vehicle detection feed with YOLOv8 processing
-- **Smart Insights**: AI-powered traffic analysis with rule-based recommendations
-- **Metric Cards**: Animated counters for key performance indicators
-- **Traffic Network Visualization**: Interactive network topology with live status
-- **Heatmap Panel**: Traffic intensity visualization with speed/density modes
+- **Real-time Vehicle Detection** - YOLOv8-powered object detection
+- **License Plate Recognition** - Tesseract OCR integration
+- **Speed Analysis** - Real-time speed calculation and violation detection
+- **Live Camera Feed** - Support for live camera streaming
+- **File Upload Processing** - Process uploaded videos and images
+- **Smart Insights** - AI-powered traffic analysis
+- **Analytics Dashboard** - Real-time charts and visualizations
 
-### 📊 Advanced Analytics
-- **Traffic Stability Index**: Flow stability measurement using variance analysis
-- **Speed Compliance Score**: Percentage of vehicles obeying speed limits
-- **Risk Indicator**: Real-time safety assessment (Low/Medium/High/Critical)
-- **Congestion Analysis**: Color-coded traffic flow status
-- **Time Slot Analysis**: Morning/Afternoon/Evening/Night traffic patterns
-- **OCR Results Panel**: Detected number plates with confidence scores
+## System Requirements
 
-### 🎨 UI/UX Features
-- **Dark Theme**: Professional black/navy background with neon accents
-- **Glassmorphism**: Soft glow cards with backdrop blur effects
-- **Smooth Animations**: Fade-in, slide-up, and counter animations
-- **Responsive Design**: Mobile-friendly grid layout
-- **Real-time Updates**: Live data refresh simulation
-- **Interactive Elements**: Hover effects and transitions
+### Backend
+- Python 3.8+
+- FastAPI
+- OpenCV
+- Ultralytics YOLOv8
+- Tesseract OCR
+- SQLite
 
-### 🔧 Technical Features
-- **React 18**: Modern React with hooks and functional components
-- **Tailwind CSS**: Utility-first styling with custom animations
-- **Chart.js**: Interactive charts and visualizations
-- **Modular Components**: Reusable UI components
-- **TypeScript Ready**: Prepared for TypeScript migration
+### Frontend
+- Node.js 16+
+- React 18
+- Tailwind CSS
 
 ## Installation
 
+### Backend Setup
+
 ```bash
 cd dashboard
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install Tesseract OCR (Windows)
+# Download from: https://github.com/UB-Mannheim/tesseract/wiki
+# Add to PATH: C:\Program Files\Tesseract-OCR
+
+# Verify YOLO model
+# The yolov8n.pt file should be in the dashboard directory
+```
+
+### Frontend Setup
+
+```bash
+cd dashboard
+
+# Install Node dependencies
 npm install
+
+# Start the development server
 npm start
 ```
 
-The dashboard will be available at `http://localhost:3000`
+## Running the Application
+
+### Option 1: Start Backend and Frontend Separately
+
+**Terminal 1 - Backend:**
+```bash
+cd dashboard
+python backend.py
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd dashboard
+npm start
+```
+
+### Option 2: Using Quick Start Scripts
+
+**Windows:**
+```bash
+start_dashboard.bat
+```
+
+**Linux/Mac:**
+```bash
+./start_dashboard.sh
+```
+
+## Usage
+
+### 1. Live Camera Detection
+
+1. Start the dashboard
+2. Click "Start Camera" in the Live Detection Panel
+3. Allow camera access when prompted
+4. Vehicles will be detected and tracked in real-time
+5. Speed violations (>60 km/h) are automatically logged
+
+### 2. Upload Video for Processing
+
+1. Click "Upload Video" button in the Live Detection Panel
+2. Select a video file (MP4, AVI, MOV, MKV)
+3. The video will be processed with YOLOv8 detection
+4. Results will be saved to the `results/` directory
+5. Processed video with detection overlay can be downloaded
+
+### 3. Upload Image for Analysis
+
+1. Use the Data Collection Panel
+2. Drag and drop or click to upload an image
+3. Image will be processed for vehicle detection
+4. Results displayed in real-time
+
+### 4. View Analytics
+
+- **Traffic Speed Analytics** - View speed trends and distributions
+- **Congestion Analysis** - Monitor traffic congestion levels
+- **Time Slot Analysis** - Analyze traffic patterns by time
+- **Speed Variance** - Track speed variations across roads
+- **Smart Insights** - Get AI-powered traffic recommendations
+
+## API Endpoints
+
+### GET /metrics
+Returns traffic metrics for dashboard cards.
+
+### GET /analytics
+Returns analytics data for charts.
+
+### GET /api/records
+Returns all vehicle records and violations.
+
+### GET /api/insights
+Returns smart insights based on traffic data.
+
+### POST /api/upload
+Upload video or image files for processing.
+
+### POST /api/camera/start
+Start live camera stream.
+
+### POST /api/camera/stop
+Stop live camera stream.
 
 ## Project Structure
 
@@ -51,146 +147,64 @@ The dashboard will be available at `http://localhost:3000`
 dashboard/
 ├── src/
 │   ├── components/
-│   │   ├── Header.js                    # Main header with status
-│   │   ├── MetricCards.js              # KPI metric cards
-│   │   ├── CentralVisualization.js     # Live detection + network
-│   │   ├── SmartInsightsPanel.js       # AI insights & recommendations
-│   │   ├── AdvancedFeatures.js         # Advanced analytics
-│   │   ├── TrafficSpeedAnalytics.js    # Speed analysis charts
-│   │   ├── CongestionAnalysis.js       # Congestion monitoring
-│   │   ├── TimeSlotTrafficAnalysis.js  # Time-based analysis
-│   │   ├── SpeedVarianceAnalysis.js    # Speed variance charts
-│   │   ├── PredictiveTrafficModule.js  # Predictive analytics
-│   │   ├── DataCollectionPanel.js      # Data upload interface
-│   │   ├── FutureReadyModules.js       # Future enhancements
+│   │   ├── Header.js
+│   │   ├── CentralVisualization.js
+│   │   ├── MetricCards.js
+│   │   ├── DataCollectionPanel.js
+│   │   ├── SmartInsightsPanel.js
+│   │   ├── TrafficSpeedAnalytics.js
+│   │   ├── CongestionAnalysis.js
+│   │   ├── TimeSlotTrafficAnalysis.js
+│   │   ├── SpeedVarianceAnalysis.js
 │   │   └── widgets/
-│   │       ├── MetricCard.js           # Individual metric card
-│   │       ├── HeatmapPanel.js         # Traffic heatmap
-│   │       ├── ChartCard.js            # Chart wrapper
-│   │       └── SpeedVarianceChart.js   # Speed variance visualization
-│   ├── App.js                          # Main application
-│   ├── index.js                        # React entry point
-│   └── index.css                       # Global styles & animations
-├── package.json                        # Dependencies
-├── tailwind.config.js                  # Tailwind configuration
-└── postcss.config.js                   # PostCSS configuration
+│   ├── hooks/
+│   │   └── useApi.js
+│   ├── App.js
+│   └── index.js
+├── backend.py
+├── integration_layer.py
+├── data_processing.py
+├── requirements.txt
+└── package.json
 ```
 
-## Key Components
+## Database
 
-### Header
-- System status indicator (Online/Warning/Offline)
-- Live timestamp
-- Quick stats (vehicles, average speed)
-- Navigation menu
+The system uses SQLite to store:
+- Vehicle detection logs
+- Speed violation records
+- License plate data
+- Timestamps
 
-### Metric Cards
-- Total Vehicles Detected
-- Average Speed
-- Overspeed Violations
-- Speed Compliance Rate
-- Traffic Stability Index
+Database file: `sentryspeed.db`
 
-### Live Detection Panel
-- Simulated camera feed with detection boxes
-- Real-time vehicle count
-- OCR number plate results
-- Processing status indicator
+## CSV Integration
 
-### Smart Insights
-- Rule-based traffic analysis
-- Risk level assessment
-- Priority-based alerts
-- Quick action buttons
+Vehicle data is logged to CSV for analysis:
+- Location: `dashboard/results/traffic_data.csv`
+- Format: timestamp, vehicle_id, speed_kmh, plate_text, confidence, detection_class, frame_id
 
-### Advanced Features
-- Traffic Stability Index with progress bars
-- Speed Compliance Score visualization
-- Risk Indicator with color coding
-- Efficiency Score metrics
-- Anomaly detection counter
-- Congestion cause analysis
+## Troubleshooting
 
-### Heatmap Panel
-- Interactive traffic intensity grid
-- Speed/density mode switching
-- Color-coded intensity scale
-- Zone statistics (Low/Medium/High)
+### Camera Not Working
+- Check browser permissions
+- Try different camera in browser settings
+- Restart browser
 
-## Styling System
+### YOLO Model Not Loading
+- Verify `yolov8n.pt` exists in dashboard directory
+- Check internet connection (model downloads on first run)
 
-### Color Palette
-- **Background**: Black to navy gradient (`#0a0f1c` to `#1a2332`)
-- **Primary**: Neon blue (`#00bfff`)
-- **Secondary**: Cyan (`#00ffff`)
-- **Success**: Neon green (`#00ff88`)
-- **Warning**: Orange (`#ffa726`)
-- **Error**: Red (`#ff4757`)
+### Tesseract OCR Not Working
+- Install Tesseract from official repository
+- Add to system PATH
+- Restart application
 
-### Animations
-- **Fade In**: Smooth component entrance
-- **Slide Up**: Upward slide animation
-- **Glow Pulse**: Neon glow effect
-- **Counter**: Number counting animation
-- **Detection Pulse**: Live detection indicator
-- **Data Flow**: Streaming data effect
-
-### Glassmorphism Effects
-- Backdrop blur with transparency
-- Subtle border highlights
-- Inset light reflections
-- Hover state transformations
-
-## Integration with Backend
-
-The dashboard is designed to work with the existing Flask backend (`app.py`) without modifications:
-
-- **API Endpoints**: Ready to consume existing Flask routes
-- **Real-time Data**: Simulated updates with actual data structure
-- **File Upload**: Compatible with existing upload functionality
-- **Camera Stream**: Prepared for live camera feed integration
-
-## Customization
-
-### Adding New Metrics
-1. Update the `metrics` object in `App.js`
-2. Add new metric card in `MetricCards.js`
-3. Create corresponding visualization component
-
-### Modifying Insights
-1. Edit the rule-based logic in `SmartInsightsPanel.js`
-2. Add new insight types and priorities
-3. Customize alert thresholds
-
-### Styling Changes
-1. Update color palette in `tailwind.config.js`
-2. Modify animations in `index.css`
-3. Adjust component-specific styles
-
-## Performance Considerations
-
-- **Lazy Loading**: Components load on demand
-- **Memoization**: Prevent unnecessary re-renders
-- **Optimized Animations**: Hardware-accelerated CSS transforms
-- **Efficient Updates**: Minimal DOM manipulation
-- **Responsive Images**: Optimized for different screen sizes
-
-## Browser Support
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
-## Future Enhancements
-
-- WebSocket integration for real-time data
-- Advanced chart interactions
-- Export functionality
-- User preferences and themes
-- Mobile app companion
-- Multi-language support
+### Port Already in Use
+- Backend default: 8000
+- Frontend default: 3000
+- Change ports in respective configuration files
 
 ## License
 
-This dashboard is part of the Traffic Speed Analyser System project.
+MIT License - See LICENSE file for details
